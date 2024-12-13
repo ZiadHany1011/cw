@@ -125,9 +125,9 @@ server.put('/sandwich/edit/:id', verifyToken, (req, res) => {
     const isAdmin = req.userDetails.isAdmin;
     if (isAdmin !== 1)
         return res.status(403).send('You are not an admin');
-    const { name, description, price, stock } = req.body;
-    const query = `UPDATE SANDWICH SET NAME=?, DESCRIPTION=?, PRICE=?, STOCK=? WHERE ID=?`;
-    db.run(query, [name, description, price, stock, req.params.id], (err) => {
+    const { name, description, price, quantity } = req.body;
+    const query = `UPDATE SANDWICH SET NAME=?, DESCRIPTION=?, PRICE=?, QUANTITY=? WHERE ID=?`;
+    db.run(query, [name, description, price, quantity, req.params.id], (err) => {
         if (err) {
             console.log(err);
             return res.send(err);
@@ -284,10 +284,7 @@ server.get('/sandwich/:sandwichId/ingredients', verifyToken, (req, res) => {
     const sandwichId = req.params.sandwichId;
 
     // Get ingredients for the sandwich
-    const query = `SELECT i.ID, i.NAME, si.QUANTITY 
-                   FROM INGREDIENT i
-                   JOIN SANDWICH_INGREDIENTS si ON si.INGREDIENT_ID = i.ID
-                   WHERE si.SANDWICH_ID = ?`;
+    const query = `SELECT * FROM SANDWHICH WHERE SANDWICH_ID = ?`;
     db.all(query, [sandwichId], (err, rows) => {
         if (err) {
             console.log(err);
@@ -420,11 +417,32 @@ server.get('/sandwich/stock', verifyToken, (req, res) => {
     });
 });
 
-
-
-
 // Start Server
 server.listen(port, () => {
     console.log(`Server started at port ${port}`);
-    
+    // Execute table creation
+    db.serialize(() => {
+        db.run(createUserTable, (err) => {
+            if (err) console.error("Error creating USER table:", err);
+        });
+        db.run(createSandwichTable, (err) => {
+            if (err) console.error("Error creating SANDWICH table:", err);
+        });
+        db.run(createIngredientTable, (err) => {
+            if (err) console.error("Error creating INGREDIENT table:", err);
+        });
+        db.run(createCartItemTable, (err) => {
+            if (err) console.error("Error creating CART_ITEM table:", err);
+        });
+        db.run(createOrderItemTable, (err) => {
+            if (err) console.error("Error creating ORDER_ITEM table:", err);
+        });
+        db.run(createFeedbackTable, (err) => {
+            if (err) console.error("Error creating FEEDBACK table:", err);
+        });
+        db.run(createSandwichIngredientsTable, (err) => {
+            if (err) console.error("Error creating SANDWICH_INGREDIENTS table:", err);
+        });
+    });
+        
 });
