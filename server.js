@@ -78,13 +78,10 @@ server.post('/user/register', (req, res) => {
 });
 
 // Sandwich Routes
-//ADD SANDWICH -            -ADMIN #####################################################
+//ADD SANDWICH 
 server.post('/sandwich/add', verifyToken, (req, res) => {
-    // const isAdmin = req.userDetails.isAdmin;
-    // if (isAdmin !== 1)
-    //     return res.status(403).send('You are not an admin');
     const { name, description, price, stock } = req.body;
-    db.run(`INSERT INTO SANDWICH (NAME, DESCRIPTION, PRICE, STOCK, USER_ID) VALUES (?, ?, ?, ?, ?)`,
+    db.run(`INSERT INTO SANDWICH (NAME, DESCRIPTION, PRICE, QUANTITY, USER_ID) VALUES (?, ?, ?, ?, ?)`,
         [name, description, price, stock, req.userDetails.id], (err) => {
             if (err) {
                 console.log(err);
@@ -250,6 +247,118 @@ server.get('/feedback/:sandwichId', (req, res) => {
         }
     });
 });
+server.post('/sandwich/:sandwichId/ingredient', verifyToken, (req, res) => {
+    const { ingredientId, quantity } = req.body;
+    const sandwichId = req.params.sandwichId;
+
+    if (!ingredientId || !quantity) {
+        return res.status(400).send('Ingredient ID and quantity are required');
+    }
+
+    // Check if the sandwich exists
+    db.get(`SELECT * FROM SANDWICH WHERE ID=?`, [sandwichId], (err, row) => {
+        if (err || !row) {
+            return res.status(404).send('Sandwich not found');
+        }
+
+        // Check if the ingredient exists
+        db.get(`SELECT * FROM INGREDIENT WHERE ID=?`, [ingredientId], (err, row) => {
+            if (err || !row) {
+                return res.status(404).send('Ingredient not found');
+            }
+
+            // Insert the ingredient into the sandwich
+            db.run(`INSERT INTO SANDWICH_INGREDIENTS (SANDWICH_ID, INGREDIENT_ID, QUANTITY) VALUES (?, ?, ?)`,
+                [sandwichId, ingredientId, quantity], (err) => {
+                    if (err) {
+                        console.log(err);
+                        return res.status(500).send('Error adding ingredient');
+                    } else {
+                        return res.send('Ingredient added successfully');
+                    }
+                });
+        });
+    });
+});
+server.get('/sandwich/:sandwichId/ingredients', verifyToken, (req, res) => {
+    const sandwichId = req.params.sandwichId;
+
+    // Get ingredients for the sandwich
+    const query = `SELECT i.ID, i.NAME, si.QUANTITY 
+                   FROM INGREDIENT i
+                   JOIN SANDWICH_INGREDIENTS si ON si.INGREDIENT_ID = i.ID
+                   WHERE si.SANDWICH_ID = ?`;
+    db.all(query, [sandwichId], (err, rows) => {
+        if (err) {
+            console.log(err);
+            return res.status(500).send('Error retrieving ingredients');
+        } else if (rows.length === 0) {
+            return res.status(404).send('No ingredients found for this sandwich');
+        } else {
+            return res.json(rows);
+        }
+    });
+});
+server.put('/sandwich/:sandwichId/ingredient/:ingredientId', verifyToken, (req, res) => {
+    const { quantity } = req.body;
+    const sandwichId = req.params.sandwichId;
+    const ingredientId = req.params.ingredientId;
+
+    if (!quantity) {
+        return res.status(400).send('Quantity is required');
+    }
+
+    // Check if the sandwich and ingredient exist
+    db.get(`SELECT * FROM SANDWICH_INGREDIENTS WHERE SANDWICH_ID=? AND INGREDIENT_ID=?`, 
+        [sandwichId, ingredientId], (err, row) => {
+            if (err || !row) {
+                return res.status(404).send('Ingredient not found in this sandwich');
+            }
+
+            // Update the quantity
+            db.run(`UPDATE SANDWICH_INGREDIENTS SET QUANTITY=? WHERE SANDWICH_ID=? AND INGREDIENT_ID=?`,
+                [quantity, sandwichId, ingredientId], (err) => {
+                    if (err) {
+                        console.log(err);
+                        return res.status(500).send('Error updating ingredient quantity');
+                    } else {
+                        return res.send('Ingredient quantity updated successfully');
+                    }
+                });
+        });
+});
+server.delete('/sandwich/:sandwichId/ingredient/:ingredientId', verifyToken, (req, res) => {
+    const sandwichId = req.params.sandwichId;
+    const ingredientId = req.params.ingredientId;
+
+    // Remove the ingredient from the sandwich
+    db.run(`DELETE FROM SANDWICH_INGREDIENTS WHERE SANDWICH_ID=? AND INGREDIENT_ID=?`,
+        [sandwichId, ingredientId], (err) => {
+            if (err) {
+                console.log(err);
+                return res.status(500).send('Error removing ingredient');
+            } else {
+                return res.send('Ingredient removed from sandwich');
+            }
+        });
+});
+server.get('/sandwich/ingredients', verifyToken, (req, res) => {
+    const query = `
+        SELECT s.ID AS SandwichID, s.NAME AS SandwichName, i.ID AS IngredientID, i.NAME AS IngredientName, si.QUANTITY
+        FROM SANDWICH s
+        JOIN SANDWICH_INGREDIENTS si ON si.SANDWICH_ID = s.ID
+        JOIN INGREDIENT i ON si.INGREDIENT_ID = i.ID
+    `;
+    db.all(query, (err, rows) => {
+        if (err) {
+            console.log(err);
+            return res.status(500).send('Error retrieving sandwiches with ingredients');
+        } else {
+            return res.json(rows);
+        }
+    });
+});
+
 
 // Start Server
 server.listen(port, () => {
