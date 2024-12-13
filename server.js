@@ -299,6 +299,37 @@ server.get('/sandwich/:sandwichId/ingredients', verifyToken, (req, res) => {
         }
     });
 });
+
+// GET all ingredients
+server.get('/ingredients', (req, res) => {
+    const query = 'SELECT * FROM INGREDIENT';
+    db.all(query, (err, rows) => {
+        if (err) {
+            console.log(err);
+            return res.status(500).send('Error retrieving ingredients');
+        } else {
+            return res.json(rows);
+        }
+    });
+});
+// PUT - Update ingredient stock
+server.put('/ingredient/:id/stock', verifyToken, (req, res) => {
+    const isAdmin = req.userDetails.isAdmin;
+    if (isAdmin !== 1)
+        return res.status(403).send('You are not an admin');
+    const { stock } = req.body;
+    const query = `UPDATE INGREDIENT SET STOCK=? WHERE ID=?`;
+
+    db.run(query, [stock, req.params.id], (err) => {
+        if (err) {
+            console.log(err);
+            return res.status(500).send('Error updating ingredient stock');
+        } else {
+            return res.send('Ingredient stock updated successfully');
+        }
+    });
+});
+
 server.put('/sandwich/:sandwichId/ingredient/:ingredientId', verifyToken, (req, res) => {
     const { quantity } = req.body;
     const sandwichId = req.params.sandwichId;
@@ -358,6 +389,38 @@ server.get('/sandwich/ingredients', verifyToken, (req, res) => {
         }
     });
 });
+// DELETE - Remove ingredient
+server.delete('/ingredient/:id', verifyToken, (req, res) => {
+    const isAdmin = req.userDetails.isAdmin;
+    if (isAdmin !== 1)
+        return res.status(403).send('You are not an admin');
+    const query = `DELETE FROM INGREDIENT WHERE ID=?`;
+    db.run(query, [req.params.id], (err) => {
+        if (err) {
+            console.log(err);
+            return res.status(500).send('Error removing ingredient');
+        } else {
+            return res.send('Ingredient removed successfully');
+        }
+    });
+});
+// GET sandwich stock (Admin only)
+server.get('/sandwich/stock', verifyToken, (req, res) => {
+    const isAdmin = req.userDetails.isAdmin;
+    if (isAdmin !== 1) return res.status(403).send('You are not authorized to view stock');
+
+    const query = 'SELECT NAME, QUANTITY FROM SANDWICH';
+    db.all(query, (err, rows) => {
+        if (err) {
+            console.log(err);
+            return res.status(500).send('Error retrieving sandwich stock');
+        } else {
+            return res.json(rows);
+        }
+    });
+});
+
+
 
 
 // Start Server
