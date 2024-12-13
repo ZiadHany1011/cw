@@ -72,6 +72,31 @@ CREATE TABLE IF NOT EXISTS SANDWICH_INGREDIENTS (
     FOREIGN KEY (INGREDIENT_ID) REFERENCES INGREDIENT(ID)
 )`;
 
+// Execute table creation
+db.serialize(() => {
+    db.run(createUserTable, (err) => {
+        if (err) console.error("Error creating USER table:", err);
+    });
+    db.run(createSandwichTable, (err) => {
+        if (err) console.error("Error creating SANDWICH table:", err);
+    });
+    db.run(createIngredientTable, (err) => {
+        if (err) console.error("Error creating INGREDIENT table:", err);
+    });
+    db.run(createCartItemTable, (err) => {
+        if (err) console.error("Error creating CART_ITEM table:", err);
+    });
+    db.run(createOrderItemTable, (err) => {
+        if (err) console.error("Error creating ORDER_ITEM table:", err);
+    });
+    db.run(createFeedbackTable, (err) => {
+        if (err) console.error("Error creating FEEDBACK table:", err);
+    });
+    db.run(createSandwichIngredientsTable, (err) => {
+        if (err) console.error("Error creating SANDWICH_INGREDIENTS table:", err);
+    });
+});
+
 // Exporting the database connection
 module.exports = {
     db,
