@@ -1,4 +1,5 @@
 const sqlite3 = require('sqlite3');
+
 const db = new sqlite3.Database('bitebuilders.db');
 
 // Table creation queries
@@ -17,8 +18,7 @@ CREATE TABLE IF NOT EXISTS SANDWICH (
     NAME TEXT NOT NULL,
     DESCRIPTION TEXT,
     PRICE INT NOT NULL,
-    QUANTITY INTEGER NOT NULL,
-    FOREIGN KEY (USER_ID) REFERENCES USER(ID)
+    QUANTITY INTEGER NOT NULL
 )`;
 
 const createCartItemTable = `
@@ -26,11 +26,12 @@ CREATE TABLE IF NOT EXISTS CART_ITEM (
     ID INTEGER PRIMARY KEY AUTOINCREMENT,
     USER_ID INTEGER NOT NULL,
     SANDWICH_ID INTEGER NOT NULL,
-    QUANTITY INTEGER NOT NULL
+    QUANTITY INTEGER NOT NULL,
     FOREIGN KEY (USER_ID) REFERENCES USER(ID),
     FOREIGN KEY (SANDWICH_ID) REFERENCES SANDWICH(ID)
 )`;
-const createordertable = `
+
+const createOrderTable = `
 CREATE TABLE IF NOT EXISTS ORDER_ITEM (
     ID INTEGER PRIMARY KEY AUTOINCREMENT,
     USER_ID INTEGER NOT NULL,
@@ -45,10 +46,10 @@ const createFeedbackTable = `
 CREATE TABLE IF NOT EXISTS FEEDBACK (
     ID INTEGER PRIMARY KEY AUTOINCREMENT,
     USER_ID INTEGER NOT NULL,
-    SANDWICH_ID INT NOT NULL,
+    SANDWICH_ID INTEGER NOT NULL,
     COMMENT TEXT,
     FOREIGN KEY (USER_ID) REFERENCES USER(ID),
-    FOREIGN KEY (ORDER_ITEM_ID) REFERENCES ORDER_ITEM(ID)
+    FOREIGN KEY (SANDWICH_ID) REFERENCES SANDWICH(ID)
 )`;
 
 // Exporting the database connection
@@ -57,6 +58,6 @@ module.exports = {
     createUserTable,
     createSandwichTable,
     createCartItemTable,
-    createordertable,
+    createOrderTable,
     createFeedbackTable
-}
+};

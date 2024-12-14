@@ -2,7 +2,7 @@ const express = require('express')
 const cors = require('cors');
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcrypt');
-const db_access = require('./db.js')
+const db_access = require('./Db.js')
 const db = db_access.db
 const cookieParser = require('cookie-parser');
 const server = express()
@@ -29,7 +29,6 @@ const verifyToken = (req, res, next) => {
         next()
     })
 }
-
 // User Routes
 // LOGIN
 server.post('/user/login', (req, res) => {
@@ -341,9 +340,13 @@ server.get('/admin/users', verifyToken, (req, res) => {
     });
 });
 
-server.listen(port, () => {
-    console.log(`Server started on port ${port}`);
+server.listen(port, (error) => {
+    if (error) {
+        console.log('The server did not start:', error)
+    }
+
     db.serialize(() => {
+        console.log(`server started at port ${port}`)
         db.run(db_access.createUserTable, (err) => {
             if (err) console.log("Error creating user table", err);
         });
@@ -353,7 +356,7 @@ server.listen(port, () => {
         db.run(db_access.createCartItemTable, (err) => {
             if (err) console.log("Error creating cart table", err);
         });
-        db.run(db_access.createordertable, (err) => {
+        db.run(db_access.createOrderTable, (err) => {
             if (err) console.log("Error creating order table",err)
         });
         db.run(db_access.createFeedbackTable, (err) => {
