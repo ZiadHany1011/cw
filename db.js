@@ -30,6 +30,16 @@ CREATE TABLE IF NOT EXISTS CART_ITEM (
     FOREIGN KEY (USER_ID) REFERENCES USER(ID),
     FOREIGN KEY (SANDWICH_ID) REFERENCES SANDWICH(ID)
 )`;
+const createordertable = `
+CREATE TABLE IF NOT EXISTS ORDER_ITEM (
+    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    USER_ID INTEGER NOT NULL,
+    SANDWICH_ID INTEGER NOT NULL,
+    QUANTITY INTEGER NOT NULL,
+    PRICE REAL NOT NULL,
+    FOREIGN KEY (USER_ID) REFERENCES USER(ID),
+    FOREIGN KEY (SANDWICH_ID) REFERENCES SANDWICH(ID)
+)`;
 
 const createFeedbackTable = `
 CREATE TABLE IF NOT EXISTS FEEDBACK (
@@ -47,5 +57,6 @@ module.exports = {
     createUserTable,
     createSandwichTable,
     createCartItemTable,
-    createFeedbackTable,
+    createordertable,
+    createFeedbackTable
 }

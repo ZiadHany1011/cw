@@ -34,13 +34,15 @@ const verifyToken = (req, res, next) => {
 // LOGIN
 server.post('/user/login', (req, res) => {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).send('Email and password are required');
+    if (!email || !password)
+         return res.status(400).send('Email and password are required');
 
     db.get(`SELECT * FROM USER WHERE EMAIL=?`, [email], (err, row) => {
         if (err || !row) return res.status(401).send('Invalid credentials');
         
         bcrypt.compare(password, row.PASSWORD, (err, isMatch) => {
-            if (err || !isMatch) return res.status(401).send('Invalid credentials');
+            if (err || !isMatch)
+                 return res.status(401).send('Invalid credentials');
             
             const token = generateToken(row.ID, row.ISADMIN);
             res.cookie('authToken', token, {
@@ -56,7 +58,8 @@ server.post('/user/login', (req, res) => {
 // REGISTER
 server.post('/user/register', (req, res) => {
     const { name, email, password } = req.body;
-    if (!name || !email || !password) return res.status(400).send('All fields are required');
+    if (!name || !email || !password) 
+        return res.status(400).send('All fields are required');
 
     bcrypt.hash(password, 10, (err, hashedPassword) => {
         if (err) return res.status(500).send('Error hashing password');
@@ -66,6 +69,27 @@ server.post('/user/register', (req, res) => {
                 if (err) return res.status(500).send('Error registering user');
                 return res.status(200).send('Registration successful');
             });
+    });
+});
+
+server.put('/user/profile', verifyToken, (req, res) => {
+    const userId = req.userDetails.id;
+    const { name, email } = req.body;
+
+    db.run(
+        `UPDATE USER SET NAME = ?, EMAIL = ? WHERE ID = ?`,
+        [name, email, userId],
+        (err) => {
+            if (err) return res.status(500).send('Error updating profile');
+            return res.status(200).send('Profile updated successfully');
+        }
+    );
+});
+
+server.get('/sandwiches', (req, res) => {
+    db.all('SELECT * FROM SANDWICH', (err, rows) => {
+        if (err) return res.status(500).send('Error fetching sandwiches');
+        return res.json(rows);
     });
 });
 
@@ -129,6 +153,62 @@ server.put('/cart/update/:id', verifyToken, (req, res) => {
         return res.status(200).send('Cart item updated');
     });
 });
+// Place an Order
+server.post('/order/place', verifyToken, (req, res) => {
+    const userId = req.userDetails.id;
+
+    // Fetch all cart items for the user
+    db.all(
+        `SELECT CART_ITEM.SANDWICH_ID, CART_ITEM.QUANTITY, SANDWICH.PRICE 
+         FROM CART_ITEM 
+         JOIN SANDWICH ON CART_ITEM.SANDWICH_ID = SANDWICH.ID 
+         WHERE CART_ITEM.USER_ID = ?`,
+        [userId],
+        (err, cartItems) => {
+            if (err) return res.status(500).send('Error fetching cart items');
+            if (cartItems.length === 0) return res.status(400).send('Cart is empty');
+
+            // Insert order items
+            const insertOrderItem = db.prepare(
+                `INSERT INTO ORDER_ITEM (USER_ID, SANDWICH_ID, QUANTITY, PRICE) VALUES (?, ?, ?, ?)`
+            );
+
+            cartItems.forEach((item) => {
+                insertOrderItem.run(userId, item.SANDWICH_ID, item.QUANTITY, item.PRICE);
+            });
+
+            insertOrderItem.finalize((err) => {
+                if (err) return res.status(500).send('Error placing order');
+
+                // Clear the cart
+                db.run('DELETE FROM CART_ITEM WHERE USER_ID = ?', [userId], (err) => {
+                    if (err) return res.status(500).send('Error clearing cart');
+                    return res.status(200).send('Order placed successfully');
+                });
+            });
+        }
+    );
+});
+
+// Get User Orders
+server.get('/orders', verifyToken, (req, res) => {
+    const userId = req.userDetails.id;
+
+    db.all(
+        `SELECT ORDER_ITEM.ID, ORDER_ITEM.ORDER_DATE, 
+                ORDER_ITEM.SANDWICH_ID, SANDWICH.NAME AS SANDWICH_NAME, 
+                ORDER_ITEM.QUANTITY, ORDER_ITEM.PRICE AS ITEM_PRICE 
+         FROM ORDER_ITEM
+         JOIN SANDWICH ON ORDER_ITEM.SANDWICH_ID = SANDWICH.ID
+         WHERE ORDER_ITEM.USER_ID = ?`,
+        [userId],
+        (err, rows) => {
+            if (err) return res.status(500).send('Error fetching orders');
+            return res.json(rows);
+        }
+    );
+});
+
 
 
 // Submit Feedback (For Customers)
@@ -272,6 +352,9 @@ server.listen(port, () => {
         });
         db.run(db_access.createCartItemTable, (err) => {
             if (err) console.log("Error creating cart table", err);
+        });
+        db.run(db_access.createordertable, (err) => {
+            if (err) console.log("Error creating order table",err)
         });
         db.run(db_access.createFeedbackTable, (err) => {
             if (err) console.log("Error creating feedback table", err);
