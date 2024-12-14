@@ -5,6 +5,8 @@
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "sqlite3": "^5.1.7",
     "web-vitals": "^4.2.4"
   },
@@ -18,6 +20,5 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
-  "devDependencies": {}
+  "description": ""
 }
