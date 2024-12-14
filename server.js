@@ -1,427 +1,282 @@
-const express = require('express');
+const express = require('express')
 const cors = require('cors');
-const jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken')
 const bcrypt = require('bcrypt');
-const db_access = require('./db.js');
-const db = db_access.db ;
+const db_access = require('./db.js')
+const db = db_access.db
 const cookieParser = require('cookie-parser');
-const server = express();
-const port = 8080;
-const secret_key = 'DdsdsdKKFDDFDdvfddvxvc4dsdvdsvdb';
-
+const server = express()
+const port = 8080
+const secret_key = 'DdsdsdKKFDDFDdvfddvxvc4dsdvdsvdb'
 server.use(cors({
-    origin: "http://localhost:3000",
-    credentials: true
-}));
-server.use(express.json());
-server.use(cookieParser());
-
+    origin:"http://localhost:3000",
+    credentials:true
+}))
+server.use(express.json())
+server.use(cookieParser())
 const generateToken = (id, isAdmin) => {
-    return jwt.sign({ id, isAdmin }, secret_key, { expiresIn: '1h' });
+    return jwt.sign({ id, isAdmin }, secret_key, { expiresIn: '1h' })
 }
-
 const verifyToken = (req, res, next) => {
-    const token = req.cookies.authToken;
+    const token = req.cookies.authToken
     if (!token)
-        return res.status(401).send('unauthorized');
+        return res.status(401).send('unauthorized')
     jwt.verify(token, secret_key, (err, details) => {
         if (err)
-            return res.status(403).send('invalid or expired token');
-        req.userDetails = details;
-        next();
-    });
-};
+            return res.status(403).send('invalid or expired token')
+        req.userDetails = details
+
+        next()
+    })
+}
 
 // User Routes
-//LOGIN
+// LOGIN
 server.post('/user/login', (req, res) => {
-    const email = req.body.email;
-    const password = req.body.password;
-    db.get(`SELECT * FROM USER WHERE EMAIL=?`, [email], (err, row) => {
-        bcrypt.compare(password, row.PASSWORD, (err, isMatch) => {
-            if (err) {
-                return res.status(500).send('error comparing password');
-            }
-            if (!isMatch) {
-                return res.status(401).send('invalid credentials');
-            }
-            let userID = row.ID;
-            let isAdmin = row.ISADMIN;
-            const token = generateToken(userID, isAdmin);
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).send('Email and password are required');
 
+    db.get(`SELECT * FROM USER WHERE EMAIL=?`, [email], (err, row) => {
+        if (err || !row) return res.status(401).send('Invalid credentials');
+        
+        bcrypt.compare(password, row.PASSWORD, (err, isMatch) => {
+            if (err || !isMatch) return res.status(401).send('Invalid credentials');
+            
+            const token = generateToken(row.ID, row.ISADMIN);
             res.cookie('authToken', token, {
                 httpOnly: true,
                 sameSite: 'none',
-                secure: true,
-                expiresIn: '1h'
+                secure: true
             });
-            return res.status(200).json({ id: userID, admin: isAdmin });
+            return res.status(200).json({ id: row.ID, admin: row.ISADMIN });
         });
     });
 });
 
-
-//REGISTER
+// REGISTER
 server.post('/user/register', (req, res) => {
     const { name, email, password } = req.body;
+    if (!name || !email || !password) return res.status(400).send('All fields are required');
+
     bcrypt.hash(password, 10, (err, hashedPassword) => {
-        if (err) {
-            return res.status(500).send('error hashing password');
-        }
-        db.run(`INSERT INTO USER (NAME, EMAIL, PASSWORD, ISADMIN) VALUES (?, ?, ?, ?)`, [name, email, hashedPassword, 0], (err) => {
-            if (err) {
-                return res.status(401).send(err);
-            }
-            return res.status(200).send('registration successful');
-        });
+        if (err) return res.status(500).send('Error hashing password');
+        
+        db.run(`INSERT INTO USER (NAME, EMAIL, PASSWORD, ISADMIN) VALUES (?, ?, ?, ?)`,
+            [name, email, hashedPassword, 0], (err) => {
+                if (err) return res.status(500).send('Error registering user');
+                return res.status(200).send('Registration successful');
+            });
     });
 });
 
-// Sandwich Routes
-//ADD SANDWICH 
-server.post('/sandwich/add', (req, res) => {
-    // const isAdmin = req.userDetails.isAdmin;
-    // if (isAdmin !== 1)
-    //     return res.status(403).send('You are not an admin');
-    const { name, description, price, quantity} = req.body;
-    db.run(`INSERT INTO SANDWICH (NAME, DESCRIPTION, PRICE, QUANTITY, USER_ID) VALUES (?, ?, ?, ?, ?)`,
-        [name, description, price, quantity, req.userDetails.id], (err) => {
-            if (err) {
-                console.log(err);
-                return res.send(err);
-            } else {
-                return res.send('Sandwich added successfully');
-            }
-        });
-});
-
-//GET SANDWICH
-server.get('/sandwich', (req, res) => {
-    const query = `SELECT * FROM SANDWICH`;
-    db.all(query, (err, rows) => {
-        if (err) {
-            console.log(err);
-            return res.send(err);
-        } else {
-            return res.json(rows);
-        }
+// Search Sandwiches (For Customers)
+server.get('/sandwiches/search', (req, res) => {
+    const { query } = req.query; // Assuming the query parameter contains the search term
+    db.all('SELECT * FROM SANDWICH WHERE NAME LIKE ? OR DESCRIPTION LIKE ?', [`%${query}%`, `%${query}%`], (err, rows) => {
+        if (err) return res.status(500).send('Error searching sandwiches');
+        return res.json(rows);
     });
 });
 
-//GET SANDWICH BY NAME
-server.get('/sandwich/search/', (req, res) => {
-    const query = `SELECT * FROM SANDWICH WHERE NAME='${req.body.name}'`;
-    db.get(query, (err, row) => {
-        if (err) {
-            console.log(err);
-            return res.send(err);
-        } else if (!row) {
-            return res.send(`Sandwich with ID '${req.body.name}' not found`);
-        } else {
-            return res.send(row);
-        }
-    });
-});
 
-//EDIT BY ID --ADMIN
-server.put('/sandwich/edit/:id', verifyToken, (req, res) => {
-    const isAdmin = req.userDetails.isAdmin;
-    if (isAdmin !== 1)
-        return res.status(403).send('You are not an admin');
-    const { name, description, price, quantity } = req.body;
-    const query = `UPDATE SANDWICH SET NAME=?, DESCRIPTION=?, PRICE=?, QUANTITY=? WHERE ID=?`;
-    db.run(query, [name, description, price, quantity, req.params.id], (err) => {
-        if (err) {
-            console.log(err);
-            return res.send(err);
-        } else {
-            return res.send('Sandwich updated successfully');
-        }
-    });
-});
-
-//DELETE BY ID  -ADMIN
-server.delete('/sandwich/:id', verifyToken, (req, res) => {
-    const isAdmin = req.userDetails.isAdmin;
-    if (isAdmin !== 1)
-        return res.status(403).send('You are not an admin');
-    const query = `DELETE FROM SANDWICH WHERE ID=?`;
-    db.run(query, [req.params.id], (err) => {
-        if (err) {
-            console.log(err);
-            return res.send(err);
-        } else {
-            return res.send('Sandwich deleted successfully');
-        }
-    });
-});
-
-// Cart Routes
-//ADD TO CART
+// Add Sandwich to Cart (For Customers)
 server.post('/cart/add', verifyToken, (req, res) => {
-    const { sandwichId, quantity, price } = req.body;
-    db.run(`INSERT INTO CART_ITEM (USER_ID, SANDWICH_ID, QUANTITY, PRICE) VALUES (?, ?, ?, ?)`,
-        [req.userDetails.id, sandwichId, quantity, price], (err) => {
-            if (err) {
-                console.log(err);
-                return res.send(err);
-            } else {
-                return res.send('Added to cart');
-            }
-        });
-});
+    const userId = req.userDetails.id;
+    const { sandwich_id, quantity } = req.body;
 
-//REMOVE FROM CART
-server.delete('/cart/remove/:id', verifyToken, (req, res) => {
-    const query = `DELETE FROM CART_ITEM WHERE ID=? AND USER_ID=?`;
-    db.run(query, [req.params.id, req.userDetails.id], (err) => {
-        if (err) {
-            console.log(err);
-            return res.send(err);
+    db.get('SELECT * FROM CART_ITEM WHERE USER_ID = ? AND SANDWICH_ID = ?', [userId, sandwich_id], (err, row) => {
+        if (err) return res.status(500).send('Error checking cart');
+        if (row) {
+            db.run('UPDATE CART_ITEM SET QUANTITY = QUANTITY + ? WHERE USER_ID = ? AND SANDWICH_ID = ?', [quantity, userId, sandwich_id], (err) => {
+                if (err) return res.status(500).send('Error updating cart');
+                return res.status(200).send('Cart updated');
+            });
         } else {
-            return res.send('Removed from cart');
+            db.run('INSERT INTO CART_ITEM (USER_ID, SANDWICH_ID, QUANTITY) VALUES (?, ?, ?)', [userId, sandwich_id, quantity], (err) => {
+                if (err) return res.status(500).send('Error adding to cart');
+                return res.status(200).send('Added to cart');
+            });
         }
     });
 });
 
-//GET IN THE CART
+// View Cart (For Customers)
 server.get('/cart', verifyToken, (req, res) => {
-    const query = `SELECT * FROM CART_ITEM WHERE USER_ID=?`;
-    db.all(query, [req.userDetails.id], (err, rows) => {
-        if (err) {
-            console.log(err);
-            return res.send(err);
-        } else {
-            return res.json(rows);
-        }
+    const userId = req.userDetails.id;
+    db.all('SELECT SANDWICH.NAME, SANDWICH.PRICE, CART_ITEM.QUANTITY FROM CART_ITEM JOIN SANDWICH ON CART_ITEM.SANDWICH_ID = SANDWICH.ID WHERE CART_ITEM.USER_ID = ?', [userId], (err, rows) => {
+        if (err) return res.status(500).send('Error fetching cart');
+        return res.json(rows);
     });
 });
 
-// Order Routes
-//MAKE ORDER
-server.post('/order', (req, res) => {
-    const { totalAmount, sandwichItems } = req.body;
-    db.run(`INSERT INTO ORDER_ITEM (USER_ID, SANDWICH_ID, QUANTITY, PRICE) VALUES (?, ?, ?, ?)`,
-        [req.userDetails.id, sandwichItems[0].sandwichId, sandwichItems[0].quantity, sandwichItems[0].price, totalAmount], (err) => {
-            if (err) {
-                console.log(err);
-                return res.send(err);
-            } else {
-                return res.send('Order placed successfully');
-            }
-        });
-});
-
-//GET ORDERS
-server.get('/orders', verifyToken, (req, res) => {
-    const query = `SELECT * FROM ORDER_ITEM WHERE USER_ID=?`;
-    db.all(query, [req.userDetails.id], (err, rows) => {
-        if (err) {
-            console.log(err);
-            return res.send(err);
-        } else {
-            return res.json(rows);
-        }
+// Clear Cart (For Customers)
+server.delete('/cart/clear', verifyToken, (req, res) => {
+    const userId = req.userDetails.id;
+    db.run('DELETE FROM CART_ITEM WHERE USER_ID = ?', [userId], (err) => {
+        if (err) return res.status(500).send('Error clearing cart');
+        return res.status(200).send('Cart cleared');
     });
 });
 
-// Feedback Routes
-server.post('/feedback', (req, res) => {
-    const { orderItemId, comment} = req.body;
-    db.run(`INSERT INTO FEEDBACK (USER_ID, ORDER_ITEM_ID, COMMENT) VALUES (?, ?, ?)`,
-        [req.userDetails.id, orderItemId, comment,], (err) => {
-            if (err) {
-                console.log(err);
-                return res.send(err);
-            } else {
-                return res.send('Feedback submitted successfully');
-            }
-        });
-});
-
-server.get('/feedback/:sandwichId', (req, res) => {
-    const query = `SELECT * FROM FEEDBACK WHERE SANDWICH_ID=?`;
-    db.all(query, [req.params.sandwichId], (err, rows) => {
-        if (err) {
-            console.log(err);
-            return res.send(err);
-        } else {
-            return res.json(rows);
-        }
-    });
-});
-server.post('/sandwich/:sandwichId/ingredient', verifyToken, (req, res) => {
-    const { ingredientId, quantity } = req.body;
-    const sandwichId = req.params.sandwichId;
-
-    if (!ingredientId || !quantity) {
-        return res.status(400).send('Ingredient ID and quantity are required');
-    }
-
-    // Check if the sandwich exists
-    db.get(`SELECT * FROM SANDWICH WHERE ID=?`, [sandwichId], (err, row) => {
-        if (err || !row) {
-            return res.status(404).send('Sandwich not found');
-        }
-
-        // Check if the ingredient exists
-        db.get(`SELECT * FROM INGREDIENT WHERE ID=?`, [ingredientId], (err, row) => {
-            if (err || !row) {
-                return res.status(404).send('Ingredient not found');
-            }
-
-            // Insert the ingredient into the sandwich
-            db.run(`INSERT INTO SANDWICH_INGREDIENTS (SANDWICH_ID, INGREDIENT_ID, QUANTITY) VALUES (?, ?, ?)`,
-                [sandwichId, ingredientId, quantity], (err) => {
-                    if (err) {
-                        console.log(err);
-                        return res.status(500).send('Error adding ingredient');
-                    } else {
-                        return res.send('Ingredient added successfully');
-                    }
-                });
-        });
-    });
-});
-server.get('/sandwich/:sandwichId/ingredients', verifyToken, (req, res) => {
-    const sandwichId = req.params.sandwichId;
-
-    // Get ingredients for the sandwich
-    const query = `SELECT * FROM SANDWHICH WHERE SANDWICH_ID = ?`;
-    db.all(query, [sandwichId], (err, rows) => {
-        if (err) {
-            console.log(err);
-            return res.status(500).send('Error retrieving ingredients');
-        } else if (rows.length === 0) {
-            return res.status(404).send('No ingredients found for this sandwich');
-        } else {
-            return res.json(rows);
-        }
-    });
-});
-
-// GET all ingredients
-server.get('/ingredients', (req, res) => {
-    const query = 'SELECT * FROM INGREDIENT';
-    db.all(query, (err, rows) => {
-        if (err) {
-            console.log(err);
-            return res.status(500).send('Error retrieving ingredients');
-        } else {
-            return res.json(rows);
-        }
-    });
-});
-// PUT - Update ingredient stock
-server.put('/ingredient/:id/stock', verifyToken, (req, res) => {
-    const isAdmin = req.userDetails.isAdmin;
-    if (isAdmin !== 1)
-        return res.status(403).send('You are not an admin');
-    const { stock } = req.body;
-    const query = `UPDATE INGREDIENT SET STOCK=? WHERE ID=?`;
-
-    db.run(query, [stock, req.params.id], (err) => {
-        if (err) {
-            console.log(err);
-            return res.status(500).send('Error updating ingredient stock');
-        } else {
-            return res.send('Ingredient stock updated successfully');
-        }
-    });
-});
-
-server.put('/sandwich/:sandwichId/ingredient/:ingredientId', verifyToken, (req, res) => {
+// Update Cart Item Quantity (For Customers)
+server.put('/cart/update/:id', verifyToken, (req, res) => {
     const { quantity } = req.body;
-    const sandwichId = req.params.sandwichId;
-    const ingredientId = req.params.ingredientId;
+    const cartItemId = req.params.id;
+    const userId = req.userDetails.id;
 
-    if (!quantity) {
-        return res.status(400).send('Quantity is required');
-    }
-
-    // Check if the sandwich and ingredient exist
-    db.get(`SELECT * FROM SANDWICH_INGREDIENTS WHERE SANDWICH_ID=? AND INGREDIENT_ID=?`, 
-        [sandwichId, ingredientId], (err, row) => {
-            if (err || !row) {
-                return res.status(404).send('Ingredient not found in this sandwich');
-            }
-
-            // Update the quantity
-            db.run(`UPDATE SANDWICH_INGREDIENTS SET QUANTITY=? WHERE SANDWICH_ID=? AND INGREDIENT_ID=?`,
-                [quantity, sandwichId, ingredientId], (err) => {
-                    if (err) {
-                        console.log(err);
-                        return res.status(500).send('Error updating ingredient quantity');
-                    } else {
-                        return res.send('Ingredient quantity updated successfully');
-                    }
-                });
-        });
-});
-server.delete('/sandwich/:sandwichId/ingredient/:ingredientId', verifyToken, (req, res) => {
-    const sandwichId = req.params.sandwichId;
-    const ingredientId = req.params.ingredientId;
-
-    // Remove the ingredient from the sandwich
-    db.run(`DELETE FROM SANDWICH_INGREDIENTS WHERE SANDWICH_ID=? AND INGREDIENT_ID=?`,
-        [sandwichId, ingredientId], (err) => {
-            if (err) {
-                console.log(err);
-                return res.status(500).send('Error removing ingredient');
-            } else {
-                return res.send('Ingredient removed from sandwich');
-            }
-        });
-});
-server.get('/sandwich/ingredients', verifyToken, (req, res) => {
-    const query = `
-        SELECT s.ID AS SandwichID, s.NAME AS SandwichName, i.ID AS IngredientID, i.NAME AS IngredientName, si.QUANTITY
-        FROM SANDWICH s
-        JOIN SANDWICH_INGREDIENTS si ON si.SANDWICH_ID = s.ID
-        JOIN INGREDIENT i ON si.INGREDIENT_ID = i.ID
-    `;
-    db.all(query, (err, rows) => {
-        if (err) {
-            console.log(err);
-            return res.status(500).send('Error retrieving sandwiches with ingredients');
-        } else {
-            return res.json(rows);
-        }
+    db.run('UPDATE CART_ITEM SET QUANTITY = ? WHERE ID = ? AND USER_ID = ?', [quantity, cartItemId, userId], (err) => {
+        if (err) return res.status(500).send('Error updating cart item');
+        return res.status(200).send('Cart item updated');
     });
 });
-// DELETE - Remove ingredient
-server.delete('/ingredient/:id', verifyToken, (req, res) => {
+
+
+// Submit Feedback (For Customers)
+server.post('/feedback', verifyToken, (req, res) => {
+    const { sandwich_id, comment } = req.body;
+    const userId = req.userDetails.id;
+
+    db.run('INSERT INTO FEEDBACK (USER_ID, SANDWICH_ID, COMMENT) VALUES (?, ?, ?)', [userId, sandwich_id, comment], (err) => {
+        if (err) return res.status(500).send('Error submitting feedback');
+        return res.status(200).send('Feedback submitted');
+    });
+});
+
+
+// Admin Routes
+
+// Add Sandwich (For Admin)
+server.post('/admin/sandwich', verifyToken, (req, res) => {
     const isAdmin = req.userDetails.isAdmin;
-    if (isAdmin !== 1)
-        return res.status(403).send('You are not an admin');
-    const query = `DELETE FROM INGREDIENT WHERE ID=?`;
-    db.run(query, [req.params.id], (err) => {
-        if (err) {
-            console.log(err);
-            return res.status(500).send('Error removing ingredient');
-        } else {
-            return res.send('Ingredient removed successfully');
-        }
+    if (isAdmin !== 1) return res.status(403).send('Not an admin');
+
+    const { name, description, price, quantity } = req.body;
+    const userId = req.userDetails.id; // Assuming the admin who adds the sandwich is the user
+
+    db.run('INSERT INTO SANDWICH (NAME, DESCRIPTION, PRICE, QUANTITY, USER_ID) VALUES (?, ?, ?, ?, ?)', [name, description, price, quantity, userId], (err) => {
+        if (err) return res.status(500).send('Error adding sandwich');
+        return res.status(200).send('Sandwich added');
     });
 });
-// GET sandwich stock (Admin only)
-server.get('/sandwich/stock', verifyToken, (req, res) => {
+
+// Admin Delete Sandwich (For Admin)
+server.delete('/admin/sandwich/:id', verifyToken, (req, res) => {
     const isAdmin = req.userDetails.isAdmin;
-    if (isAdmin !== 1) return res.status(403).send('You are not authorized to view stock');
+    if (isAdmin !== 1) return res.status(403).send('Not an admin');
 
-    const query = 'SELECT NAME, QUANTITY FROM SANDWICH';
-    db.all(query, (err, rows) => {
-        if (err) {
-            console.log(err);
-            return res.status(500).send('Error retrieving sandwich stock');
-        } else {
-            return res.json(rows);
-        }
+    const sandwichId = req.params.id;
+
+    // First, ensure the sandwich exists
+    db.get('SELECT * FROM SANDWICH WHERE ID = ?', [sandwichId], (err, row) => {
+        if (err) return res.status(500).send('Error fetching sandwich');
+        if (!row) return res.status(404).send('Sandwich not found');
+
+        // Delete the sandwich
+        db.run('DELETE FROM SANDWICH WHERE ID = ?', [sandwichId], (err) => {
+            if (err) return res.status(500).send('Error deleting sandwich');
+            return res.status(200).send('Sandwich deleted');
+        });
     });
 });
 
-// Start Server
+// Admin Update Sandwich (For Admin)
+server.put('/admin/sandwich/:id', verifyToken, (req, res) => {
+    const isAdmin = req.userDetails.isAdmin;
+    if (isAdmin !== 1) return res.status(403).send('Not an admin');
+
+    const sandwichId = req.params.id;
+    const { name, description, price, quantity } = req.body;
+
+    // First, ensure the sandwich exists
+    db.get('SELECT * FROM SANDWICH WHERE ID = ?', [sandwichId], (err, row) => {
+        if (err) return res.status(500).send('Error fetching sandwich');
+        if (!row) return res.status(404).send('Sandwich not found');
+
+        // Update the sandwich details
+        db.run('UPDATE SANDWICH SET NAME = ?, DESCRIPTION = ?, PRICE = ?, QUANTITY = ? WHERE ID = ?', [name, description, price, quantity, sandwichId], (err) => {
+            if (err) return res.status(500).send('Error updating sandwich');
+            return res.status(200).send('Sandwich updated');
+        });
+    });
+});
+
+// Manage Sandwich Stock (For Admin)
+server.put('/admin/sandwich/:id/stock', verifyToken, (req, res) => {
+    const isAdmin = req.userDetails.isAdmin;
+    if (isAdmin !== 1) return res.status(403).send('Not an admin');
+
+    const sandwichId = req.params.id;
+    const { quantity } = req.body;
+
+    db.run('UPDATE SANDWICH SET QUANTITY = QUANTITY + ? WHERE ID = ?', [quantity, sandwichId], (err) => {
+        if (err) return res.status(500).send('Error updating sandwich stock');
+        return res.status(200).send('Sandwich stock updated');
+    });
+});
+
+// Manage Feedback (For Admin)
+server.get('/admin/feedback', verifyToken, (req, res) => {
+    const isAdmin = req.userDetails.isAdmin;
+    if (isAdmin !== 1) return res.status(403).send('Not an admin');
+
+    db.all('SELECT * FROM FEEDBACK', (err, rows) => {
+        if (err) return res.status(500).send('Error fetching feedback');
+        return res.json(rows);
+    });
+});
+
+// Delete Feedback (For Admin)
+server.delete('/admin/feedback/:id', verifyToken, (req, res) => {
+    const isAdmin = req.userDetails.isAdmin;
+    if (isAdmin !== 1) return res.status(403).send('Not an admin');
+
+    const feedbackId = req.params.id;
+
+    db.run('DELETE FROM FEEDBACK WHERE ID = ?', [feedbackId], (err) => {
+        if (err) return res.status(500).send('Error deleting feedback');
+        return res.status(200).send('Feedback deleted');
+    });
+});
+
+// Get Orders (For Admin)
+server.get('/admin/orders', verifyToken, (req, res) => {
+    const isAdmin = req.userDetails.isAdmin;
+    if (isAdmin !== 1) return res.status(403).send('Not an admin');
+
+    db.all('SELECT * FROM ORDER', (err, rows) => {
+        if (err) return res.status(500).send('Error fetching orders');
+        return res.json(rows);
+    });
+});
+
+
+// Get All Users (For Admin)
+server.get('/admin/users', verifyToken, (req, res) => {
+    const isAdmin = req.userDetails.isAdmin;
+    if (isAdmin !== 1) return res.status(403).send('Not an admin');
+
+    db.all('SELECT ID, NAME, EMAIL, ISADMIN FROM USER', (err, rows) => {
+        if (err) return res.status(500).send('Error fetching users');
+        return res.json(rows);
+    });
+});
+
 server.listen(port, () => {
-    console.log(`Server started at port ${port}`);
-    // Execute table creation      
+    console.log(`Server started on port ${port}`);
+    db.serialize(() => {
+        db.run(db_access.createUserTable, (err) => {
+            if (err) console.log("Error creating user table", err);
+        });
+        db.run(db_access.createSandwichTable, (err) => {
+            if (err) console.log("Error creating sandwich table", err);
+        });
+        db.run(db_access.createCartItemTable, (err) => {
+            if (err) console.log("Error creating cart table", err);
+        });
+        db.run(db_access.createFeedbackTable, (err) => {
+            if (err) console.log("Error creating feedback table", err);
+        });
+    });
 });
+
+
