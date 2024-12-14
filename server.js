@@ -2,7 +2,7 @@ const express = require('express')
 const cors = require('cors');
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcrypt');
-const db_access = require('./Db.js')
+const db_access = require('./db.js')
 const db = db_access.db
 const cookieParser = require('cookie-parser');
 const server = express()
@@ -64,7 +64,7 @@ server.post('/user/register', (req, res) => {
         if (err) return res.status(500).send('Error hashing password');
         
         db.run(`INSERT INTO USER (NAME, EMAIL, PASSWORD, ISADMIN) VALUES (?, ?, ?, ?)`,
-            [name, email, hashedPassword, 0], (err) => {
+            [name, email, hashedPassword, ], (err) => {
                 if (err) return res.status(500).send('Error registering user');
                 return res.status(200).send('Registration successful');
             });
@@ -107,21 +107,32 @@ server.post('/cart/add', verifyToken, (req, res) => {
     const userId = req.userDetails.id;
     const { sandwich_id, quantity } = req.body;
 
+    // Ensure quantity is a valid number
+    if (isNaN(quantity) || quantity <= 0) {
+        return res.status(400).send('Invalid quantity');
+    }
+
     db.get('SELECT * FROM CART_ITEM WHERE USER_ID = ? AND SANDWICH_ID = ?', [userId, sandwich_id], (err, row) => {
         if (err) return res.status(500).send('Error checking cart');
+
         if (row) {
-            db.run('UPDATE CART_ITEM SET QUANTITY = QUANTITY + ? WHERE USER_ID = ? AND SANDWICH_ID = ?', [quantity, userId, sandwich_id], (err) => {
+            // If the sandwich is already in the cart, update the quantity
+            db.run('UPDATE CART_ITEM SET QUANTITY = QUANTITY + ? WHERE USER_ID = ? AND SANDWICH_ID = ?', 
+            [quantity, userId, sandwich_id], (err) => {
                 if (err) return res.status(500).send('Error updating cart');
                 return res.status(200).send('Cart updated');
             });
         } else {
-            db.run('INSERT INTO CART_ITEM (USER_ID, SANDWICH_ID, QUANTITY) VALUES (?, ?, ?)', [userId, sandwich_id, quantity], (err) => {
+            // If the sandwich is not in the cart, add it
+            db.run('INSERT INTO CART_ITEM (USER_ID, SANDWICH_ID, QUANTITY) VALUES (?, ?, ?)', 
+            [userId, sandwich_id, quantity], (err) => {
                 if (err) return res.status(500).send('Error adding to cart');
                 return res.status(200).send('Added to cart');
             });
         }
     });
 });
+
 
 // View Cart (For Customers)
 server.get('/cart', verifyToken, (req, res) => {
@@ -230,9 +241,8 @@ server.post('/admin/sandwich', verifyToken, (req, res) => {
     if (isAdmin !== 1) return res.status(403).send('Not an admin');
 
     const { name, description, price, quantity } = req.body;
-    const userId = req.userDetails.id; // Assuming the admin who adds the sandwich is the user
 
-    db.run('INSERT INTO SANDWICH (NAME, DESCRIPTION, PRICE, QUANTITY, USER_ID) VALUES (?, ?, ?, ?, ?)', [name, description, price, quantity, userId], (err) => {
+    db.run('INSERT INTO SANDWICH (NAME, DESCRIPTION, PRICE, QUANTITY) VALUES (?, ?, ?, ?)', [name, description, price, quantity], (err) => {
         if (err) return res.status(500).send('Error adding sandwich');
         return res.status(200).send('Sandwich added');
     });

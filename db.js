@@ -1,5 +1,5 @@
 const sqlite3 = require('sqlite3');
-const db = new sqlite3.Database('bitebuilders.db');
+const db = new sqlite3.Database('bitebuilderss.db');
 
 // Table creation queries
 const createUserTable = `
@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS USER (
 const createSandwichTable = `
 CREATE TABLE IF NOT EXISTS SANDWICH (
     ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    USER_ID INTEGER NOT NULL,
     NAME TEXT NOT NULL,
     DESCRIPTION TEXT,
     PRICE INT NOT NULL,
